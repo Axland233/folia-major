@@ -390,6 +390,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                 onMouseEnter={() => setIsHangerHovered(true)}
                                                 onMouseLeave={() => setIsHangerHovered(false)}
                                                 className="absolute -top-3 right-8 z-20 h-14 w-3 rounded-full shadow-md cursor-pointer transition-transform duration-200 hover:scale-y-105 active:scale-y-95"
+                                                data-gesture-skip
                                                 animate={isEditingPosition ? {
                                                     borderColor: [
                                                         colorWithAlpha(theme.accentColor, 0.3),
