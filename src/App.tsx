@@ -1443,6 +1443,12 @@ export default function App() {
     useTouchGestures({
         targetRef: mainViewTouchRef,
         enabled: currentView === 'player',
+        shouldHandleTouch: (touch) => {
+            // Only handle gestures when the touch originates in the cover/artwork
+            // area (roughly the right 58% of the viewport). Lyrics rail, shape
+            // adjustment controls, and other interactive elements are excluded.
+            return touch.clientX > window.innerWidth * 0.42;
+        },
         onTogglePlay: () => togglePlay(),
         onNext: () => {
             void handleNextTrack();

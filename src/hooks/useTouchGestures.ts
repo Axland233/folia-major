@@ -15,6 +15,9 @@ export type TouchGestureHandlers = {
     targetRef: RefObject<HTMLDivElement | null>;
     /** When false, listeners are not attached (e.g. not on the player view). */
     enabled?: boolean;
+    /** Optional: restrict gesture handling to touches that pass this check.
+     *  Called on touchstart. Return false to skip the touch. */
+    shouldHandleTouch?: (touch: Touch, target: Element) => boolean;
     onTogglePlay: () => void;
     onNext: () => void;
     onPrev: () => void;
@@ -39,6 +42,7 @@ const SWIPE_VERTICAL_DOMINANCE = 1.4;
 export function useTouchGestures({
     targetRef,
     enabled = true,
+    shouldHandleTouch,
     onTogglePlay,
     onNext,
     onPrev,
@@ -56,8 +60,8 @@ export function useTouchGestures({
     const gestureRef = useRef<'none' | 'pan'>('none');
 
     // Keep the latest callbacks in a ref so the native listeners never need rebinding.
-    const cbRef = useRef({ onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime });
-    cbRef.current = { onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime };
+    const cbRef = useRef({ shouldHandleTouch, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime });
+    cbRef.current = { shouldHandleTouch, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime };
 
     useEffect(() => {
         const target = targetRef.current;
@@ -100,10 +104,14 @@ export function useTouchGestures({
                 gestureRef.current = 'none';
                 return;
             }
-            if (isInteractive(e.target)) {
+            const touch = e.touches[0];
+            const el = e.target instanceof Element ? e.target : null;
+            if (isInteractive(el)) {
                 return;
             }
-            const touch = e.touches[0];
+            if (cbRef.current.shouldHandleTouch && el && !cbRef.current.shouldHandleTouch(touch, el)) {
+                return;
+            }
             activeIdRef.current = touch.identifier;
             startXRef.current = touch.clientX;
             startYRef.current = touch.clientY;
