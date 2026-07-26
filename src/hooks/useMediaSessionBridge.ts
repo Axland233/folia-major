@@ -32,6 +32,23 @@ export const useMediaSessionBridge = ({
     mediaSessionNextRef,
     isNowPlayingControlDisabledRef,
 }: UseMediaSessionBridgeOptions) => {
+    // Push the current playback position/duration to the OS media notification
+    // so the lock-screen progress bar advances and seeking stays accurate.
+    const updatePositionState = (audio: HTMLAudioElement | null) => {
+        if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+            return;
+        }
+        try {
+            navigator.mediaSession.setPositionState({
+                duration: audio.duration,
+                position: Math.min(audio.currentTime, audio.duration),
+                playbackRate: audio.playbackRate || 1,
+            });
+        } catch (e) {
+            console.warn('[MediaSession] Failed to set position state', e);
+        }
+    };
+
     useEffect(() => {
         if (!('mediaSession' in navigator)) {
             return;
@@ -80,11 +97,43 @@ export const useMediaSessionBridge = ({
             void mediaSessionNextRef.current();
         });
 
+        // Seek actions let the OS media notification / lock screen scrub the track.
+        const safeSeek = (time: number) => {
+            const audio = audioRef.current;
+            if (!audio || isNowPlayingControlDisabledRef.current) {
+                return;
+            }
+            const max = Number.isFinite(audio.duration) ? audio.duration : time;
+            audio.currentTime = Math.max(0, Math.min(time, max));
+            updatePositionState(audio);
+        };
+
+        setActionHandlerSafely('seekto', (details) => {
+            safeSeek(Number.isFinite(details.seekTime) ? details.seekTime! : 0);
+        });
+        setActionHandlerSafely('seekforward', (details) => {
+            const audio = audioRef.current;
+            if (!audio) {
+                return;
+            }
+            safeSeek(audio.currentTime + (Number.isFinite(details.seekOffset) ? details.seekOffset! : 10));
+        });
+        setActionHandlerSafely('seekbackward', (details) => {
+            const audio = audioRef.current;
+            if (!audio) {
+                return;
+            }
+            safeSeek(audio.currentTime - (Number.isFinite(details.seekOffset) ? details.seekOffset! : 10));
+        });
+
         return () => {
             setActionHandlerSafely('play', null);
             setActionHandlerSafely('pause', null);
             setActionHandlerSafely('previoustrack', null);
             setActionHandlerSafely('nexttrack', null);
+            setActionHandlerSafely('seekto', null);
+            setActionHandlerSafely('seekforward', null);
+            setActionHandlerSafely('seekbackward', null);
         };
     }, [audioRef, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef]);
 
@@ -136,5 +185,8 @@ export const useMediaSessionBridge = ({
         } catch (e) {
             console.warn('[MediaSession] Failed to update playback state', e);
         }
-    }, [currentSong, isNowPlayingStageActive, playerState]);
+
+        // Keep the lock-screen progress bar in sync with the actual audio position.
+        updatePositionState(audioRef.current);
+    }, [audioRef, currentSong, isNowPlayingStageActive, playerState]);
 };

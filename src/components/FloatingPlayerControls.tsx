@@ -289,7 +289,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                     onTogglePlay();
                 }}
                 disabled={!canTogglePlay || controlsDisabled}
-                className={`col-start-2 row-start-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-none bg-(--text-primary) text-black shadow-lg transition-transform sm:col-start-1 sm:row-start-1 sm:row-span-2 ${controlsDisabled ? 'cursor-not-allowed opacity-45' : 'hover:scale-105'}`}
+                className={`folia-touch-target col-start-2 row-start-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-none bg-(--text-primary) text-black shadow-lg transition-transform sm:col-start-1 sm:row-start-1 sm:row-span-2 ${controlsDisabled ? 'cursor-not-allowed opacity-45' : 'hover:scale-105'}`}
                 style={{ backgroundColor: primaryColor, color: 'var(--bg-color)' }}
             >
                 {playerState === PlayerState.PLAYING ? (
@@ -306,7 +306,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                         onToggleLoop();
                     }}
                     disabled={controlsDisabled}
-                    className={`col-start-1 row-start-2 justify-self-end rounded-full p-2 transition-colors sm:justify-self-auto ${loopMode !== 'off' ? (isDaylight ? 'bg-black/10 text-black' : 'bg-white/20') : 'opacity-40 hover:opacity-100'} ${controlsDisabled ? 'cursor-not-allowed opacity-35' : ''}`}
+                    className={`folia-touch-target col-start-1 row-start-2 justify-self-end rounded-full p-2 transition-colors sm:justify-self-auto ${loopMode !== 'off' ? (isDaylight ? 'bg-black/10 text-black' : 'bg-white/20') : 'opacity-40 hover:opacity-100'} ${controlsDisabled ? 'cursor-not-allowed opacity-35' : ''}`}
                     style={{ color: primaryColor }}
                 >
                     {loopMode === 'off'
@@ -322,7 +322,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                         onToggleTimeline();
                     }}
                     disabled={!hasLyrics}
-                    className={`col-start-3 row-start-2 justify-self-start rounded-full p-2 transition-colors sm:justify-self-auto ${!hasLyrics ? 'cursor-not-allowed opacity-20' : `opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/10'}`}`}
+                    className={`folia-touch-target col-start-3 row-start-2 justify-self-start rounded-full p-2 transition-colors sm:justify-self-auto ${!hasLyrics ? 'cursor-not-allowed opacity-20' : `opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/10'}`}`}
                     style={{ color: primaryColor }}
                     title="View Lyrics Timeline"
                 >

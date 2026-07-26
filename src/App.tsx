@@ -55,6 +55,7 @@ import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
+import { useTouchGestures } from './hooks/useTouchGestures';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
@@ -232,6 +233,11 @@ export default function App() {
 
     // Refs
     const audioRef = useRef<HTMLAudioElement>(null);
+    // DOM node for the main player stage. Touch gestures (tap / swipe / pan) are bound here.
+    const mainViewTouchRef = useRef<HTMLDivElement>(null);
+    // Latest seek implementation, kept in a ref so the touch gesture hook can call it
+    // without being re-bound when the underlying callback identity changes.
+    const touchSeekRef = useRef<(time: number) => void>(() => {});
     const animationFrameRef = useRef<number>(0);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -326,7 +332,6 @@ export default function App() {
         nomandBackgroundTuning,
         latentBackgroundTuning,
         monetTuning,
-        pendoloTuning,
         cappellaCustomEmojiImages,
         isLoadingCappellaCustomEmojiPack,
         cappellaCustomAvatarImages,
@@ -427,8 +432,7 @@ export default function App() {
         tilt: tiltTuning,
         diorama: dioramaTuning,
         monet: monetTuning,
-        pendolo: pendoloTuning,
-    }), [cadenzaTuning, cappellaTuning, classicTuning, claddaghTuning, dioramaTuning, fumeTuning, monetTuning, partitaTuning, pendoloTuning, tiltTuning]);
+    }), [cadenzaTuning, cappellaTuning, classicTuning, claddaghTuning, dioramaTuning, fumeTuning, monetTuning, partitaTuning, tiltTuning]);
 
     const showPlayerChromeVisibilityModeStatus = useCallback((mode: PlayerChromeVisibilityMode) => {
         setStatusMsg({
@@ -1431,6 +1435,28 @@ export default function App() {
         isNowPlayingControlDisabledRef,
     });
 
+    // Touch gestures on the main player stage: double-tap toggles playback,
+    // horizontal swipe switches tracks, press-and-drag seeks.
+    useTouchGestures({
+        targetRef: mainViewTouchRef,
+        enabled: currentView === 'player',
+        onTogglePlay: () => togglePlay(),
+        onNext: () => {
+            void handleNextTrack();
+        },
+        onPrev: () => {
+            handlePrevTrack();
+        },
+        onSeek: (time) => touchSeekRef.current(time),
+        onSeekPreview: (time) => {
+            if (audioRef.current) {
+                audioRef.current.currentTime = time;
+            }
+        },
+        getDuration: () => audioRef.current?.duration || 0,
+        getCurrentTime: () => audioRef.current?.currentTime || 0,
+    });
+
     const {
         exportState,
         handleExportCommand,
@@ -2084,6 +2110,11 @@ export default function App() {
             void publishStagePlayerPlaybackUpdate();
         }
     }, [publishStagePlayerPlaybackUpdate]);
+
+    // Expose the latest seek implementation to the touch gesture hook.
+    useEffect(() => {
+        touchSeekRef.current = seekMainAudio;
+    }, [seekMainAudio]);
 
     const handleMonetLyricLineSeek = useCallback((lyricTimeSec: number) => {
         if (isNowPlayingControlDisabled) {
@@ -3071,7 +3102,8 @@ export default function App() {
 
             {/* --- VISUALIZER (Background Layer & Main Click Target) --- */}
             <div
-                className="absolute inset-0 z-0"
+                ref={mainViewTouchRef}
+                className="absolute inset-0 z-0 folia-stage-root"
                 onClick={handleContainerClick}
             >
                 {!isObsBrowserSourceRendering && (
@@ -3125,7 +3157,7 @@ export default function App() {
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                         monetPortraitImage={monetPortraitImage}
-                        onLyricLineSeek={['monet', 'pendolo'].includes(visualizerMode) ? handleMonetLyricLineSeek : undefined}
+                        onLyricLineSeek={visualizerMode === 'monet' ? handleMonetLyricLineSeek : undefined}
                         onBack={navigateBackFromPlayer}
                         alwaysShowBackButton={alwaysShowPlayerBackButton}
                     />

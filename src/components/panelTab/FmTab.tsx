@@ -38,7 +38,7 @@ const FmTab: React.FC<FmTabProps> = ({
                 {/* Previous (Disabled by default typically for FM, but requested) */}
                 <button
                     onClick={onPrevTrack}
-                    className={`p-3 rounded-full transition-colors opacity-50 hover:opacity-100 ${btnBg}`}
+                    className={`folia-touch-target p-3 rounded-full transition-colors opacity-50 hover:opacity-100 ${btnBg}`}
                     title="Previous Track"
                 >
                     <SkipBack size={24} />
@@ -61,7 +61,7 @@ const FmTab: React.FC<FmTabProps> = ({
                 {/* Next Button */}
                 <button
                     onClick={onNextTrack}
-                    className={`p-3 rounded-full transition-colors opacity-50 hover:opacity-100 ${btnBg}`}
+                    className={`folia-touch-target p-3 rounded-full transition-colors opacity-50 hover:opacity-100 ${btnBg}`}
                     title="Next Track"
                 >
                     <SkipForward size={24} />
