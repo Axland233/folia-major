@@ -1,24 +1,19 @@
 import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-// Touch gesture controller for the main player stage (lyrics view).
+// Touch gesture controller for the main player stage.
 //
-// Implements three interactions on the primary playback view:
-//   - Double tap  -> toggle play / pause
-//   - Horizontal swipe (quick flick) -> previous / next track
-//   - Press-and-drag (pan, held longer) -> seek by mapping horizontal offset to playback time
+// Listens in the capture phase so gestures fire even when visualizer lyrics
+// rails call stopPropagation on their own touch handlers (e.g. MonetLyricsRail).
 //
-// The hook only needs a single touch point; multi-touch gestures are ignored so they
-// don't fight with pinch-zoom or other multi-finger interactions elsewhere.
+// Vertical movement (scrolling) is detected and abandoned early so the lyrics
+// rail scroll behaviour is preserved.
 
 export type TouchGestureHandlers = {
     /** Element that represents the main view. Touch listeners are attached here. */
     targetRef: RefObject<HTMLDivElement | null>;
     /** When false, listeners are not attached (e.g. not on the player view). */
     enabled?: boolean;
-    /** Optional: restrict gesture handling to touches that pass this check.
-     *  Called on touchstart. Return false to skip the touch. */
-    shouldHandleTouch?: (touch: Touch, target: Element) => boolean;
     /** Labels for gesture feedback toast. Leave undefined to disable toast. */
     gestureLabels?: {
         playPause: string;
@@ -45,11 +40,12 @@ const PAN_HOLD_THRESHOLD_MS = 220;
 const TAP_MOVE_TOLERANCE = 14;
 const TAP_MAX_DURATION = 250;
 const SWIPE_VERTICAL_DOMINANCE = 1.4;
+const VERTICAL_ABANDON_RATIO = 0.7;
+const VERTICAL_ABANDON_MIN_PX = 40;
 
 export function useTouchGestures({
     targetRef,
     enabled = true,
-    shouldHandleTouch,
     gestureLabels,
     onTogglePlay,
     onNext,
@@ -65,7 +61,7 @@ export function useTouchGestures({
     const startYRef = useRef(0);
     const startTRef = useRef(0);
     const startCurrentTimeRef = useRef(0);
-    const gestureRef = useRef<'none' | 'pan'>('none');
+    const gestureRef = useRef<'none' | 'pan' | 'vertical'>('none');
     const toastTimerRef = useRef<number | null>(null);
 
     // ── Gesture feedback toast ──
@@ -83,8 +79,8 @@ export function useTouchGestures({
     };
 
     // Keep the latest callbacks in a ref so the native listeners never need rebinding.
-    const cbRef = useRef({ shouldHandleTouch, gestureLabels, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime });
-    cbRef.current = { shouldHandleTouch, gestureLabels, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime };
+    const cbRef = useRef({ gestureLabels, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime });
+    cbRef.current = { gestureLabels, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime };
 
     useEffect(() => {
         const target = targetRef.current;
@@ -122,25 +118,24 @@ export function useTouchGestures({
 
         const onTouchStart = (e: TouchEvent) => {
             if (e.touches.length !== 1) {
-                // More than one finger: abandon any in-progress single-finger gesture.
                 activeIdRef.current = null;
                 gestureRef.current = 'none';
                 return;
             }
-            const touch = e.touches[0];
             const el = e.target instanceof Element ? e.target : null;
             if (isInteractive(el)) {
                 return;
             }
-            if (cbRef.current.shouldHandleTouch && el && !cbRef.current.shouldHandleTouch(touch, el)) {
-                return;
-            }
+            const touch = e.touches[0];
             activeIdRef.current = touch.identifier;
             startXRef.current = touch.clientX;
             startYRef.current = touch.clientY;
             startTRef.current = Date.now();
             startCurrentTimeRef.current = cbRef.current.getCurrentTime();
             gestureRef.current = 'none';
+            // Do NOT stopPropagation — the lyrics rail also needs to see
+            // this event for its own scroll handling. We use the capture
+            // phase to get first-look without blocking the rail.
         };
 
         const onTouchMove = (e: TouchEvent) => {
@@ -157,10 +152,22 @@ export function useTouchGestures({
             const dy = touch.clientY - startYRef.current;
             const dt = Date.now() - startTRef.current;
 
+            // ── Vertical scroll detection: abandon the gesture so the lyrics
+            //     rail can scroll freely. Once abandoned, never re-engage. ──
+            if (gestureRef.current === 'none') {
+                const absDY = Math.abs(dy);
+                if (absDY > VERTICAL_ABANDON_MIN_PX && absDY > Math.abs(dx) * VERTICAL_ABANDON_RATIO) {
+                    gestureRef.current = 'vertical';
+                    return;
+                }
+            }
+
+            if (gestureRef.current === 'vertical') {
+                return;
+            }
+
             if (gestureRef.current !== 'pan') {
                 const horizontal = Math.abs(dx) > Math.abs(dy);
-                // Promote to a seek-pan once the user has held and dragged horizontally.
-                // A quicker flick (shorter hold) is handled as a swipe at touchend instead.
                 if (dt >= PAN_HOLD_THRESHOLD_MS && horizontal && Math.abs(dx) > TAP_MOVE_TOLERANCE) {
                     gestureRef.current = 'pan';
                 }
@@ -190,6 +197,13 @@ export function useTouchGestures({
             const absDx = Math.abs(dx);
             const absDy = Math.abs(dy);
 
+            // Vertical scroll — abandoned; let the lyrics rail handle the end.
+            if (gestureRef.current === 'vertical') {
+                activeIdRef.current = null;
+                gestureRef.current = 'none';
+                return;
+            }
+
             if (gestureRef.current === 'pan') {
                 if (absDx > absDy) {
                     e.preventDefault();
@@ -205,10 +219,10 @@ export function useTouchGestures({
                 e.preventDefault();
                 if (dx < 0) {
                     cbRef.current.onNext();
-                    if (cbRef.current.gestureLabels) showGestureToast('⏩', cbRef.current.gestureLabels.next);
+                    if (cbRef.current.gestureLabels) showGestureToast('\u23E9', cbRef.current.gestureLabels.next);
                 } else {
                     cbRef.current.onPrev();
-                    if (cbRef.current.gestureLabels) showGestureToast('⏪', cbRef.current.gestureLabels.prev);
+                    if (cbRef.current.gestureLabels) showGestureToast('\u23EA', cbRef.current.gestureLabels.prev);
                 }
                 activeIdRef.current = null;
                 return;
@@ -221,7 +235,7 @@ export function useTouchGestures({
                     lastTapTimeRef.current = 0;
                     e.preventDefault();
                     cbRef.current.onTogglePlay();
-                    if (cbRef.current.gestureLabels) showGestureToast('⏯', cbRef.current.gestureLabels.playPause);
+                    if (cbRef.current.gestureLabels) showGestureToast('\u23EF', cbRef.current.gestureLabels.playPause);
                 } else {
                     lastTapTimeRef.current = now;
                 }
@@ -237,16 +251,19 @@ export function useTouchGestures({
             gestureRef.current = 'none';
         };
 
-        target.addEventListener('touchstart', onTouchStart, { passive: true });
-        target.addEventListener('touchmove', onTouchMove, { passive: false });
-        target.addEventListener('touchend', onTouchEnd, { passive: false });
-        target.addEventListener('touchcancel', onTouchCancel, { passive: true });
+        // ── Capture phase: we get the event before the lyrics rail's native
+        //     handlers, so we can decide whether to assert the gesture or let
+        //     the rail scroll behaviour take over. ──
+        target.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
+        target.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+        target.addEventListener('touchend', onTouchEnd, { passive: false, capture: true });
+        target.addEventListener('touchcancel', onTouchCancel, { passive: true, capture: true });
 
         return () => {
-            target.removeEventListener('touchstart', onTouchStart);
-            target.removeEventListener('touchmove', onTouchMove);
-            target.removeEventListener('touchend', onTouchEnd);
-            target.removeEventListener('touchcancel', onTouchCancel);
+            target.removeEventListener('touchstart', onTouchStart, { capture: true });
+            target.removeEventListener('touchmove', onTouchMove, { capture: true });
+            target.removeEventListener('touchend', onTouchEnd, { capture: true });
+            target.removeEventListener('touchcancel', onTouchCancel, { capture: true });
         };
     }, [targetRef, enabled]);
 

@@ -1443,16 +1443,10 @@ export default function App() {
     const gestureToast = useTouchGestures({
         targetRef: mainViewTouchRef,
         enabled: currentView === 'player',
-        shouldHandleTouch: (touch) => {
-            // Only handle gestures when the touch originates in the cover/artwork
-            // area (roughly the right 58% of the viewport). Lyrics rail, shape
-            // adjustment controls, and other interactive elements are excluded.
-            return touch.clientX > window.innerWidth * 0.42;
-        },
         gestureLabels: {
-            playPause: t('home.playPause'),
-            next: t('home.nextTrack'),
-            prev: t('home.previousTrack'),
+            playPause: t('help.playPause'),
+            next: t('help.nextTrack'),
+            prev: t('help.previousTrack'),
         },
         onTogglePlay: () => togglePlay(),
         onNext: () => {
