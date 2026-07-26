@@ -1,4 +1,5 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 // Touch gesture controller for the main player stage (lyrics view).
 //
@@ -18,6 +19,12 @@ export type TouchGestureHandlers = {
     /** Optional: restrict gesture handling to touches that pass this check.
      *  Called on touchstart. Return false to skip the touch. */
     shouldHandleTouch?: (touch: Touch, target: Element) => boolean;
+    /** Labels for gesture feedback toast. Leave undefined to disable toast. */
+    gestureLabels?: {
+        playPause: string;
+        next: string;
+        prev: string;
+    };
     onTogglePlay: () => void;
     onNext: () => void;
     onPrev: () => void;
@@ -43,6 +50,7 @@ export function useTouchGestures({
     targetRef,
     enabled = true,
     shouldHandleTouch,
+    gestureLabels,
     onTogglePlay,
     onNext,
     onPrev,
@@ -50,7 +58,7 @@ export function useTouchGestures({
     onSeekPreview,
     getDuration,
     getCurrentTime,
-}: TouchGestureHandlers): void {
+}: TouchGestureHandlers): ReactNode {
     const lastTapTimeRef = useRef(0);
     const activeIdRef = useRef<number | null>(null);
     const startXRef = useRef(0);
@@ -58,10 +66,25 @@ export function useTouchGestures({
     const startTRef = useRef(0);
     const startCurrentTimeRef = useRef(0);
     const gestureRef = useRef<'none' | 'pan'>('none');
+    const toastTimerRef = useRef<number | null>(null);
+
+    // ── Gesture feedback toast ──
+    const [toast, setToast] = useState<{ key: number; icon: string; label: string } | null>(null);
+
+    const showGestureToast = (icon: string, label: string) => {
+        if (toastTimerRef.current !== null) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+        setToast({ key: Date.now(), icon, label });
+        toastTimerRef.current = window.setTimeout(() => {
+            setToast(null);
+            toastTimerRef.current = null;
+        }, 1000);
+    };
 
     // Keep the latest callbacks in a ref so the native listeners never need rebinding.
-    const cbRef = useRef({ shouldHandleTouch, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime });
-    cbRef.current = { shouldHandleTouch, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime };
+    const cbRef = useRef({ shouldHandleTouch, gestureLabels, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime });
+    cbRef.current = { shouldHandleTouch, gestureLabels, onTogglePlay, onNext, onPrev, onSeek, onSeekPreview, getDuration, getCurrentTime };
 
     useEffect(() => {
         const target = targetRef.current;
@@ -182,8 +205,10 @@ export function useTouchGestures({
                 e.preventDefault();
                 if (dx < 0) {
                     cbRef.current.onNext();
+                    if (cbRef.current.gestureLabels) showGestureToast('⏩', cbRef.current.gestureLabels.next);
                 } else {
                     cbRef.current.onPrev();
+                    if (cbRef.current.gestureLabels) showGestureToast('⏪', cbRef.current.gestureLabels.prev);
                 }
                 activeIdRef.current = null;
                 return;
@@ -196,6 +221,7 @@ export function useTouchGestures({
                     lastTapTimeRef.current = 0;
                     e.preventDefault();
                     cbRef.current.onTogglePlay();
+                    if (cbRef.current.gestureLabels) showGestureToast('⏯', cbRef.current.gestureLabels.playPause);
                 } else {
                     lastTapTimeRef.current = now;
                 }
@@ -223,4 +249,17 @@ export function useTouchGestures({
             target.removeEventListener('touchcancel', onTouchCancel);
         };
     }, [targetRef, enabled]);
+
+    // ── Toast portal (rendered directly from the hook, no parent wiring needed) ──
+    if (!toast) return null;
+    return createPortal(
+        <div className="fixed inset-x-0 bottom-24 z-[200] flex justify-center pointer-events-none">
+            <div className="flex items-center gap-2 bg-black/55 backdrop-blur-md text-white/90 px-4 py-2 rounded-full text-sm font-medium shadow-2xl shadow-black/40">
+                <span className="text-base">{toast.icon}</span>
+                <span>{toast.label}</span>
+            </div>
+        </div>,
+        document.body,
+        `gesture-toast-${toast.key}`,
+    );
 }

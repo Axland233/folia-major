@@ -1440,7 +1440,7 @@ export default function App() {
 
     // Touch gestures on the main player stage: double-tap toggles playback,
     // horizontal swipe switches tracks, press-and-drag seeks.
-    useTouchGestures({
+    const gestureToast = useTouchGestures({
         targetRef: mainViewTouchRef,
         enabled: currentView === 'player',
         shouldHandleTouch: (touch) => {
@@ -1448,6 +1448,11 @@ export default function App() {
             // area (roughly the right 58% of the viewport). Lyrics rail, shape
             // adjustment controls, and other interactive elements are excluded.
             return touch.clientX > window.innerWidth * 0.42;
+        },
+        gestureLabels: {
+            playPause: t('home.playPause'),
+            next: t('home.nextTrack'),
+            prev: t('home.previousTrack'),
         },
         onTogglePlay: () => togglePlay(),
         onNext: () => {
@@ -3252,6 +3257,7 @@ export default function App() {
 
             <AppDialogs model={appDialogsModel} />
             <UserGuideModal theme={theme} />
+            {gestureToast}
         </AppShell>
     );
 }
