@@ -80,8 +80,6 @@ const MONET_GLOW_PASS_TAIL_SECONDS = 1.05;
 const MONET_SCROLL_IDLE_RESET_MS = 1800;
 const MONET_SCROLL_STEP_PX = 72;
 const MONET_TOUCH_STEP_PX = 52;
-const MONET_TOUCH_TAP_THRESHOLD_PX = 10;
-const MONET_TOUCH_VERTICAL_BIAS = 1.2;
 const MONET_SCROLL_BEFORE = 4;
 const MONET_SCROLL_AFTER = 4;
 const MONET_LAYOUT_CACHE_LIMIT = 240;
@@ -808,9 +806,6 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     const touchLastYRef = useRef<number | null>(null);
     const touchAccumulatorRef = useRef(0);
     const touchDirectionRef = useRef(0);
-    const touchStartXRef = useRef(0);
-    const touchScrollCommittedRef = useRef(false);
-    const touchHasMovedRef = useRef(false);
     const [manualScrollAnchorIndex, setManualScrollAnchorIndex] = useState<number | null>(null);
     const railSize = useMonetRailSize(railRef);
     const glowBufferPx = Math.round(lyricFontPx * 1.2);
@@ -914,16 +909,12 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
             return;
         }
 
+        event.stopPropagation();
         touchLastYRef.current = event.touches[0]?.clientY ?? null;
-        touchStartXRef.current = event.touches[0]?.clientX ?? 0;
         touchAccumulatorRef.current = 0;
         touchDirectionRef.current = 0;
-        touchScrollCommittedRef.current = false;
-        touchHasMovedRef.current = false;
         setManualScrollAnchorIndex(getFallbackAnchorIndex());
         scheduleManualScrollReset();
-        // Do NOT stopPropagation here — let the global gesture hook receive
-        // touchstart so double-tap / horizontal swipe still work on the rail.
     }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
 
     const handleRailTouchMove = useCallback((event: TouchEvent) => {
@@ -931,35 +922,13 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
             return;
         }
 
-        const touchX = event.touches[0]?.clientX;
+        event.stopPropagation();
         const nextY = event.touches[0]?.clientY;
-        if (typeof nextY !== 'number' || touchX === undefined) {
+        if (typeof nextY !== 'number') {
             return;
         }
 
         const deltaY = touchLastYRef.current - nextY;
-        const deltaX = Math.abs(touchX - touchStartXRef.current);
-        const absDY = Math.abs(deltaY);
-
-        // Detect if the touch has moved enough to disqualify it as a tap.
-        if (absDY > MONET_TOUCH_TAP_THRESHOLD_PX || deltaX > MONET_TOUCH_TAP_THRESHOLD_PX) {
-            touchHasMovedRef.current = true;
-        }
-
-        // Only commit to vertical scroll when movement is clearly vertical.
-        // Horizontal or ambiguous movement is left for the global gesture hook.
-        if (!touchScrollCommittedRef.current && absDY > deltaX * MONET_TOUCH_VERTICAL_BIAS && absDY > MONET_TOUCH_TAP_THRESHOLD_PX) {
-            touchScrollCommittedRef.current = true;
-        }
-
-        if (!touchScrollCommittedRef.current) {
-            // Not a vertical scroll — let the global gesture hook handle it.
-            return;
-        }
-
-        // Vertical scroll committed — stop propagation so the global gesture
-        // hook doesn't fight the rail scroll.
-        event.stopPropagation();
         touchLastYRef.current = nextY;
         const direction = getScrollDirection(deltaY);
         if (direction !== 0 && touchDirectionRef.current !== 0 && direction !== touchDirectionRef.current) {
@@ -980,11 +949,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         touchLastYRef.current = null;
         touchDirectionRef.current = 0;
         touchAccumulatorRef.current = 0;
-        touchScrollCommittedRef.current = false;
         scheduleManualScrollReset();
-        // Defer clearing the moved flag so onClick (lyric line seek) can still
-        // read it before the next microtask.
-        setTimeout(() => { touchHasMovedRef.current = false; }, 50);
     }, [scheduleManualScrollReset]);
 
     useEffect(() => {
@@ -1010,12 +975,6 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
 
     const handleLineSeek = useCallback((line: Line) => {
         if (!canSeek) {
-            return;
-        }
-
-        // Skip seek when the touch has moved — the user was scrolling or
-        // swiping, not intentionally tapping a lyric line.
-        if (touchHasMovedRef.current) {
             return;
         }
 
