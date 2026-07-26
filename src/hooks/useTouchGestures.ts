@@ -71,7 +71,7 @@ export function useTouchGestures({
             if (!(el instanceof Element)) {
                 return false;
             }
-            return !!el.closest('button, a, input, select, textarea, [role="slider"], [data-gesture-skip]');
+            return !!el.closest('button, a, input, select, textarea, [role="button"], [role="slider"], [data-gesture-skip]');
         };
 
         const findTouch = (list: TouchList, id: number): Touch | null => {
