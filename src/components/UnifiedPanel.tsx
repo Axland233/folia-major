@@ -971,6 +971,31 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
             {/* Toggle Button */}
             <AnimatePresence>
+                {/* ── Command Palette Button (mobile-friendly, appears alongside open panel) ── */}
+                {isOpen && !hideToggleButton && !isCommandPaletteOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 20, y: 12, scale: 0.92 }}
+                        animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: 20, y: 12, scale: 0.92 }}
+                        transition={{ duration: 0.24, ease: 'easeOut' }}
+                        className="pointer-events-auto fixed bottom-20 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
+                    >
+                        <div className="relative w-12 h-12">
+                            <button
+                                type="button"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onOpenCommandPalette?.();
+                                }}
+                                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md
+                                    border-none ${isDaylight ? 'bg-white/70 text-zinc-900' : 'bg-black/40 text-white'}`}
+                                aria-label="Open command palette"
+                            >
+                                <Command size={20} />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
                 {!hideToggleButton && (!isOpen || showOpenPanelCloseButton) && !isCommandPaletteOpen && (
                     <motion.div
                         initial={{ opacity: 0, x: 20, y: 12, scale: 0.92 }}
