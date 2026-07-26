@@ -42,6 +42,7 @@ const TAP_MAX_DURATION = 250;
 const SWIPE_VERTICAL_DOMINANCE = 1.4;
 const VERTICAL_ABANDON_RATIO = 0.7;
 const VERTICAL_ABANDON_MIN_PX = 40;
+const SINGLE_TAP_DELAY_MS = 350;
 
 export function useTouchGestures({
     targetRef,
@@ -63,6 +64,7 @@ export function useTouchGestures({
     const startCurrentTimeRef = useRef(0);
     const gestureRef = useRef<'none' | 'pan' | 'vertical'>('none');
     const toastTimerRef = useRef<number | null>(null);
+    const pendingTapRef = useRef<{ target: Element; clientX: number; clientY: number; timer: number } | null>(null);
 
     // ── Gesture feedback toast ──
     const [toast, setToast] = useState<{ key: number; icon: string; label: string } | null>(null);
@@ -94,7 +96,10 @@ export function useTouchGestures({
             if (!(el instanceof Element)) {
                 return false;
             }
-            return !!el.closest('button, a, input, select, textarea, [role="button"], [role="slider"], [data-gesture-skip]');
+            // Skip native interactive elements and gesture-opted-out controls.
+            // [role="button"] is deliberately NOT listed — we handle lyric-line
+            // taps ourselves with a deferred single-tap / double-tap scheme.
+            return !!el.closest('button, a, input, select, textarea, [role="slider"], [data-gesture-skip]');
         };
 
         const findTouch = (list: TouchList, id: number): Touch | null => {
@@ -133,6 +138,11 @@ export function useTouchGestures({
             startTRef.current = Date.now();
             startCurrentTimeRef.current = cbRef.current.getCurrentTime();
             gestureRef.current = 'none';
+            // Cancel any pending deferred single-tap if the user starts a new touch.
+            if (pendingTapRef.current) {
+                window.clearTimeout(pendingTapRef.current.timer);
+                pendingTapRef.current = null;
+            }
             // Do NOT stopPropagation — the lyrics rail also needs to see
             // this event for its own scroll handling. We use the capture
             // phase to get first-look without blocking the rail.
@@ -151,6 +161,12 @@ export function useTouchGestures({
             const dx = touch.clientX - startXRef.current;
             const dy = touch.clientY - startYRef.current;
             const dt = Date.now() - startTRef.current;
+
+            // Any movement beyond tap tolerance cancels a pending deferred single-tap.
+            if (pendingTapRef.current && (Math.abs(dx) > TAP_MOVE_TOLERANCE || Math.abs(dy) > TAP_MOVE_TOLERANCE)) {
+                window.clearTimeout(pendingTapRef.current.timer);
+                pendingTapRef.current = null;
+            }
 
             // ── Vertical scroll detection: abandon the gesture so the lyrics
             //     rail can scroll freely. Once abandoned, never re-engage. ──
@@ -228,16 +244,59 @@ export function useTouchGestures({
                 return;
             }
 
-            // Tap (within tolerance) -> double-tap detection for play / pause.
+            // ── Tap / Double-tap with deferred single-tap ──
+            // Single taps on [role="button"] elements (lyric lines) are deferred
+            // by 350 ms so that a quick second tap can be recognised as a double-tap
+            // (play/pause) instead of firing the lyric seek.  Taps on ordinary
+            // elements are not deferred — they let the native click through
+            // immediately (e.g. handleContainerClick toggles play/pause).
             if (absDx <= TAP_MOVE_TOLERANCE && absDy <= TAP_MOVE_TOLERANCE && dt <= TAP_MAX_DURATION) {
-                const now = Date.now();
-                if (now - lastTapTimeRef.current <= DOUBLE_TAP_MS) {
-                    lastTapTimeRef.current = 0;
+                const el = e.target instanceof Element ? e.target : null;
+                const isLyricLine = !!el?.closest('[role="button"]');
+                const pending = pendingTapRef.current;
+
+                if (pending && isLyricLine) {
+                    // Second tap on a lyric line within the defer window → double-tap!
+                    window.clearTimeout(pending.timer);
+                    pendingTapRef.current = null;
                     e.preventDefault();
                     cbRef.current.onTogglePlay();
                     if (cbRef.current.gestureLabels) showGestureToast('\u23EF', cbRef.current.gestureLabels.playPause);
+                } else if (isLyricLine) {
+                    // First tap on a lyric line → block the immediate click and wait
+                    // for a possible second tap.
+                    e.preventDefault();
+                    const touchOrNull = findTouch(e.changedTouches, id);
+                    pendingTapRef.current = {
+                        target: el!,
+                        clientX: touchOrNull?.clientX ?? 0,
+                        clientY: touchOrNull?.clientY ?? 0,
+                        timer: window.setTimeout(() => {
+                            const p = pendingTapRef.current;
+                            pendingTapRef.current = null;
+                            if (p) {
+                                p.target.dispatchEvent(new MouseEvent('click', {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    clientX: p.clientX,
+                                    clientY: p.clientY,
+                                }));
+                            }
+                        }, SINGLE_TAP_DELAY_MS),
+                    };
                 } else {
-                    lastTapTimeRef.current = now;
+                    // Tap on a non-lyric element — let the native click fire
+                    // immediately.  Still track the timestamp so a quick follow-up
+                    // tap on any element can be detected as a double-tap.
+                    const now = Date.now();
+                    if (now - lastTapTimeRef.current <= DOUBLE_TAP_MS) {
+                        lastTapTimeRef.current = 0;
+                        e.preventDefault();
+                        cbRef.current.onTogglePlay();
+                        if (cbRef.current.gestureLabels) showGestureToast('\u23EF', cbRef.current.gestureLabels.playPause);
+                    } else {
+                        lastTapTimeRef.current = now;
+                    }
                 }
                 activeIdRef.current = null;
                 return;
