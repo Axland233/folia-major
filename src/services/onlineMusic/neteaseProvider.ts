@@ -13,6 +13,7 @@ import type {
 import { parseNeteaseChorusRanges, processNeteaseLyrics } from '../../utils/lyrics/neteaseProcessing';
 import { createProviderSongMetadata } from '../../utils/songMetadata';
 import { isSongMarkedUnavailable, neteaseApi } from '../netease';
+import QRCode from 'qrcode';
 import { writeProviderSessionValue } from './providerStorage';
 
 // src/services/onlineMusic/neteaseProvider.ts
@@ -316,7 +317,14 @@ export const neteaseProvider: OnlineMusicProvider = {
         },
         async createQr(key) {
             const response = await neteaseApi.createQr(key);
-            return String(response?.data?.qrimg || '');
+            // ncm-api-rs doesn't generate QR images — build one from the qrurl on the client.
+            const qrImg = response?.data?.qrimg;
+            if (qrImg) return String(qrImg);
+            const qrUrl = response?.data?.qrurl;
+            if (qrUrl) {
+                return await QRCode.toDataURL(qrUrl, { width: 200, margin: 1 });
+            }
+            return '';
         },
         async checkQr(key) {
             const response = await neteaseApi.checkQr(key);
