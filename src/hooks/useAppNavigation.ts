@@ -17,6 +17,22 @@ import type { GridViewCollectionDescriptor } from '../components/app/home/gridVi
 
 type ViewState = 'home' | 'player';
 
+// ─── Overlay back stack (mobile back-button friendly) ───
+type OverlayBackEntry = { id: string; pop: () => void };
+let overlayBackStack: OverlayBackEntry[] = [];
+
+/** Push an overlay onto the back stack. When the user presses back,
+ *  this overlay will be popped (closed) before any view navigation. */
+export function pushOverlayBackEntry(entry: OverlayBackEntry) {
+    overlayBackStack.push(entry);
+    window.history.pushState({ _overlayBack: entry.id }, '', window.location.href);
+}
+
+/** Remove an overlay from the back stack when it is closed programmatically. */
+export function removeOverlayBackEntry(id: string) {
+    overlayBackStack = overlayBackStack.filter(e => e.id !== id);
+}
+
 type LocalMusicNavigationState = {
     activeRow: 0 | 1 | 2 | 3;
     selectedGroup: LocalLibraryGroup | null;
@@ -184,6 +200,13 @@ export function useAppNavigation() {
         resetLocalNavigationContext();
 
         const handlePopState = (event: PopStateEvent) => {
+            // ── Overlay back stack: close topmost overlay first ──
+            if (overlayBackStack.length > 0) {
+                const entry = overlayBackStack.pop()!;
+                entry.pop();
+                return;
+            }
+
             const state = event.state as NavigationHistoryState | null;
             if (!state) {
                 const fallbackState = buildHistoryState(getStartupView());

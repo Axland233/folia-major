@@ -292,13 +292,13 @@ export const neteaseProvider: OnlineMusicProvider = {
     auth: {
         async getLoginStatus() {
             const loginResponse = await neteaseApi.getLoginStatus();
-            const loginProfile = loginResponse?.data?.profile;
+            const loginProfile = loginResponse?.profile ?? loginResponse?.data?.profile;
             const loginCode = Number(loginResponse?.code ?? loginResponse?.data?.code);
             if (!loginProfile || [301, 401, 403].includes(loginCode)) return null;
 
             const accountResponse = await neteaseApi.getUserAccount();
             const accountCode = Number(accountResponse?.code ?? accountResponse?.data?.code);
-            const accountProfile = accountResponse?.profile;
+            const accountProfile = accountResponse?.profile ?? accountResponse?.data?.profile;
             const accountId = accountResponse?.account?.id ?? accountProfile?.userId;
             const loginId = loginProfile?.userId ?? loginProfile?.id;
             if (!accountProfile || [301, 401, 403].includes(accountCode) || !accountId || !loginId || String(accountId) !== String(loginId)) {
@@ -313,7 +313,7 @@ export const neteaseProvider: OnlineMusicProvider = {
         async logout() { await neteaseApi.logout(); },
         async getQrKey() {
             const response = await neteaseApi.getQrKey();
-            return String(response?.data?.unikey || '');
+            return String(response?.unikey || response?.data?.unikey || '');
         },
         async createQr(key) {
             const response = await neteaseApi.createQr(key);

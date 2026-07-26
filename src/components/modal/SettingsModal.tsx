@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Command, MousePointer2, Keyboard, Hand, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette, CircleHelp, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useOverlayBackStack } from '../../hooks/useOverlayBackStack';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled, getCachedNavidromeServerProfile, refreshNavidromeServerProfile } from '../../services/navidromeService';
@@ -917,6 +918,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowLyricFilterSettings(false);
         setShowAiHelpPrompt(false);
     };
+
+    // ── Mobile back button: close subview first, then close modal ──
+    // When a subview is open, pressing back closes only the subview.
+    useOverlayBackStack('settings-subview', isAnySubviewOpen, closeAllSubviews);
+    // When no subview is open, pressing back closes the entire settings modal.
+    useOverlayBackStack('settings-modal', !isAnySubviewOpen, onClose);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {

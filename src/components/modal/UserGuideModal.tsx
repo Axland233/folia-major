@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useOverlayBackStack } from '../../hooks/useOverlayBackStack';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { COMMAND_PALETTE_COMMANDS } from '../command-palette/commandRegistry';
 import type { Theme } from '../../types';
@@ -14,6 +15,9 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
     const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
     const [page, setPage] = useState<GuidePage>(1);
+
+    // ── Mobile back button: close guide modal ──
+    useOverlayBackStack('user-guide-modal', isUserGuideModalOpen, () => setIsUserGuideModalOpen(false));
 
     // Reset to page 1 whenever the modal is reopened
     useEffect(() => {

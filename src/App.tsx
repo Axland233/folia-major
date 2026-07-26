@@ -45,7 +45,8 @@ import { resolveSongCatalogRef } from './services/onlineMusic/catalogRefs';
 import { omni } from './services/onlineMusic/omni';
 import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from './services/onlineMusic/songMetadata';
 import { isNavidromeEnabled } from './services/navidromeService';
-import { useAppNavigation } from './hooks/useAppNavigation';
+import { pushOverlayBackEntry, useAppNavigation } from './hooks/useAppNavigation';
+import { useOverlayBackStack } from './hooks/useOverlayBackStack';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useKugouLibrary } from './hooks/useKugouLibrary';
 import { useOnlineProviderPlatform } from './hooks/useOnlineProviderPlatform';
@@ -122,6 +123,8 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
+    // ── Mobile back button: close player panel first ──
+    useOverlayBackStack('player-panel', isPanelOpen, () => setIsPanelOpen(false));
     useElectronNeteaseApiStatus(setStatusMsg, t);
 
     // Auto-close the player panel when leaving the player view
@@ -1797,6 +1800,7 @@ export default function App() {
         useCoverColorBg,
         visualizerBackgroundMode,
     ]);
+
     const isSettingsModalOpen = settingsModalState.isOpen;
     const {
         obsBrowserSourceStatus,
