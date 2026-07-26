@@ -209,7 +209,7 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
       },
     },
     server: {
-      port: 3000,
+      port: 1145,
       host: '0.0.0.0',
     },
     plugins: [
