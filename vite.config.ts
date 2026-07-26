@@ -211,6 +211,13 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
     server: {
       port: 1145,
       host: '0.0.0.0',
+      proxy: {
+        '/netease-api': {
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+          rewrite: (path: string) => path.replace(/^\/netease-api/, ''),
+        },
+      },
     },
     plugins: [
       devLyricProxyPlugin(),
