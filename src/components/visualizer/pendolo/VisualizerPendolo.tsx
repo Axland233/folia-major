@@ -19,6 +19,8 @@ import PendoloRotatingLine from './PendoloRotatingLine';
 const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
 const PENDOLO_SCROLL_STEP_PX = 90;
 const PENDOLO_TOUCH_STEP_PX = 60;
+const PENDOLO_TOUCH_TAP_THRESHOLD_PX = 10;
+const PENDOLO_TOUCH_VERTICAL_BIAS = 1.2;
 const PENDOLO_SCROLL_EVENT_OPTIONS = { passive: false } as const;
 
 const READY_GRACE_MS = 3000;
@@ -108,6 +110,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const touchLastYRef = useRef<number | null>(null);
     const touchAccumulatorRef = useRef(0);
     const touchDirectionRef = useRef(0);
+    const touchStartXRef = useRef(0);
+    const touchScrollCommittedRef = useRef(false);
+    const touchHasMovedRef = useRef(false);
     const pendingSeekIndexRef = useRef<number | null>(null);
 
     const getFallbackAnchorIndex = useCallback(() => {
@@ -217,6 +222,8 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
 
     const handleLineSeek = useCallback((lineIndex: number, startTime: number) => {
         if (!onLyricLineSeek) return;
+        // Skip seek when the touch has moved (user was scrolling/swiping).
+        if (touchHasMovedRef.current) return;
         if (manualScrollResetRef.current !== null) {
             window.clearTimeout(manualScrollResetRef.current);
             manualScrollResetRef.current = null;
@@ -257,20 +264,38 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
 
     const handleRailTouchStart = useCallback((event: TouchEvent) => {
         if (lines.length === 0) return;
-        event.stopPropagation();
+        touchStartXRef.current = event.touches[0]?.clientX ?? 0;
         touchLastYRef.current = event.touches[0]?.clientY ?? null;
         touchAccumulatorRef.current = 0;
         touchDirectionRef.current = 0;
+        touchScrollCommittedRef.current = false;
+        touchHasMovedRef.current = false;
         setManualScrollAnchorIndex(getFallbackAnchorIndex());
         scheduleManualScrollReset();
+        // Do NOT stopPropagation here — let the global gesture hook work.
     }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
 
     const handleRailTouchMove = useCallback((event: TouchEvent) => {
         if (lines.length === 0 || touchLastYRef.current === null) return;
-        event.stopPropagation();
+        const touchX = event.touches[0]?.clientX;
         const nextY = event.touches[0]?.clientY;
-        if (typeof nextY !== 'number') return;
+        if (typeof nextY !== 'number' || touchX === undefined) return;
+
         const deltaY = touchLastYRef.current - nextY;
+        const deltaX = Math.abs(touchX - touchStartXRef.current);
+        const absDY = Math.abs(deltaY);
+
+        if (absDY > PENDOLO_TOUCH_TAP_THRESHOLD_PX || deltaX > PENDOLO_TOUCH_TAP_THRESHOLD_PX) {
+            touchHasMovedRef.current = true;
+        }
+
+        if (!touchScrollCommittedRef.current && absDY > deltaX * PENDOLO_TOUCH_VERTICAL_BIAS && absDY > PENDOLO_TOUCH_TAP_THRESHOLD_PX) {
+            touchScrollCommittedRef.current = true;
+        }
+
+        if (!touchScrollCommittedRef.current) return;
+
+        event.stopPropagation();
         touchLastYRef.current = nextY;
         const direction = getScrollDirection(deltaY);
         if (direction !== 0 && touchDirectionRef.current !== 0 && direction !== touchDirectionRef.current) {
@@ -291,7 +316,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         touchLastYRef.current = null;
         touchDirectionRef.current = 0;
         touchAccumulatorRef.current = 0;
+        touchScrollCommittedRef.current = false;
         scheduleManualScrollReset();
+        setTimeout(() => { touchHasMovedRef.current = false; }, 50);
     }, [scheduleManualScrollReset]);
 
     useEffect(() => {
